@@ -117,35 +117,41 @@ jobs:
               DOWN_CMD="./bin/spc-alpine-docker download"
               BUILD_CMD="./bin/spc-alpine-docker build"
               RUNS_ON="ubuntu-latest"
+              PATCH_PATH="/app/src/patch_sqlitevec.php"
               ;;
             linux-aarch64)
               DOWN_CMD="./bin/spc-alpine-docker download"
               BUILD_CMD="./bin/spc-alpine-docker build"
               RUNS_ON="ubuntu-24.04-arm"
+              PATCH_PATH="/app/src/patch_sqlitevec.php"
               ;;
             linux-x86_64-glibc)
               DOWN_CMD="./bin/spc-gnu-docker download"
               BUILD_CMD="./bin/spc-gnu-docker build"
               RUNS_ON="ubuntu-22.04"
+              PATCH_PATH="/app/src/patch_sqlitevec.php"
               ;;
             linux-aarch64-glibc)
               DOWN_CMD="./bin/spc-gnu-docker download"
               BUILD_CMD="./bin/spc-gnu-docker build"
               RUNS_ON="ubuntu-22.04-arm"
+              PATCH_PATH="/app/src/patch_sqlitevec.php"
               ;;
             macos-x86_64)
               DOWN_CMD="composer update --no-dev --classmap-authoritative && ./bin/spc doctor --auto-fix && ./bin/spc download"
               BUILD_CMD="./bin/spc build"
               RUNS_ON="macos-15-intel"
+              PATCH_PATH="src/patch_sqlitevec.php"
               ;;
             macos-aarch64)
               DOWN_CMD="composer update --no-dev --classmap-authoritative && ./bin/spc doctor --auto-fix && ./bin/spc download"
               BUILD_CMD="./bin/spc build"
               RUNS_ON="macos-15"
+              PATCH_PATH="src/patch_sqlitevec.php"
               ;;
           esac
           DOWN_CMD="$DOWN_CMD --with-php=${{ inputs.php-version }} --for-extensions=${{ inputs.extensions }} --ignore-cache-sources=php-src"
-          BUILD_CMD="$BUILD_CMD ${{ inputs.extensions }}"
+          BUILD_CMD="$BUILD_CMD ${{ inputs.extensions }} -P $PATCH_PATH"
           if [ -n "${{ inputs.extra-libs }}" ]; then
             DOWN_CMD="$DOWN_CMD --for-libs=${{ inputs.extra-libs }}"
             BUILD_CMD="$BUILD_CMD --with-libs=${{ inputs.extra-libs }}"
@@ -188,6 +194,14 @@ jobs:
         env:
           phpts: nts
 
+      - name: "Prepare sqlite-vec sources"
+        run: |
+          curl -L -o sqlite-vec.zip \
+            https://github.com/asg017/sqlite-vec/releases/download/v0.1.7-alpha.2/sqlite-vec-0.1.7-alpha.2-amalgamation.zip
+          mkdir -p src/sqlite-vec
+          unzip -o sqlite-vec.zip -d src/sqlite-vec
+          rm -f sqlite-vec.zip
+
       # Cache downloaded source
       - id: cache-download
         uses: actions/cache@v4
@@ -201,6 +215,20 @@ jobs:
 #      - name: Setup tmate session
 #        if: ${{ failure() }}
 #        uses: mxschmitt/action-tmate@v3
+
+      - name: "Verify sqlite-vec (CLI)"
+        if: ${{ inputs.build-cli == true }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          buildroot/bin/php -r 'echo (new SQLite3(":memory:"))->querySingle("SELECT vec_version()"), PHP_EOL;'
+
+      - name: "Verify sqlite-vec (FPM)"
+        if: ${{ inputs.build-fpm == true }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          buildroot/bin/php -r 'echo (new SQLite3(":memory:"))->querySingle("SELECT vec_version()"), PHP_EOL;'
 
       # Upload cli executable
       - if: ${{ inputs.build-cli == true }}
