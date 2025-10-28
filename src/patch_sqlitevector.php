@@ -47,6 +47,27 @@ C;
         copy($srcPath, $destPath);
     }
 
+    // Copy fp16 header files (required dependency)
+    $fp16Dir = dirname($vectorDir) . '/libs/fp16';
+    $fp16DestDir = $sqliteExtDir . '/fp16';
+
+    if (!is_dir($fp16DestDir)) {
+        mkdir($fp16DestDir, 0755, true);
+    }
+
+    $fp16Files = ['fp16.h', 'macros.h', 'bitcasts.h'];
+    foreach ($fp16Files as $file) {
+        $srcPath = $fp16Dir . '/' . $file;
+        $destPath = $fp16DestDir . '/' . $file;
+
+        if (!file_exists($srcPath)) {
+            echo "Warning: $srcPath not found, skipping\n";
+            continue;
+        }
+
+        copy($srcPath, $destPath);
+    }
+
     // Clean up any stale object files from previous builds
     $objectFiles = [
         'core_init.o', 'core_init.lo',
@@ -118,6 +139,12 @@ M4;
     @unlink($sqliteExtDir . '/Makefile.frag');
     @unlink($sqliteExtDir . '/Makefile.objects');
     @unlink($phpDir . '/Makefile');
+
+    // Ensure fp16 directory exists (in case it was cleaned)
+    $fp16Dir = $sqliteExtDir . '/fp16';
+    if (!is_dir($fp16Dir)) {
+        mkdir($fp16Dir, 0755, true);
+    }
 }
 
 // 3) Hook the extension in MINIT just before make (backup registration)
