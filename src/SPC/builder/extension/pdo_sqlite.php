@@ -19,19 +19,24 @@ class pdo_sqlite extends Extension
             'sqlite3_column_table_name=no'
         );
 
-        // Force PDO SQLite to use the same SQLite library as sqlite3 extension
-        // This ensures PDO gets the version we compiled with SQLITE_ENABLE_LOAD_EXTENSION=1
-        // instead of finding a system library via pkg-config
-        $buildroot = BUILD_ROOT_PATH;
-        FileSystem::replaceFileRegex(
-            SOURCE_PATH . '/php-src/configure',
-            '/PHP_SETUP_SQLITE\(\[PDO_SQLITE_SHARED_LIBADD\]\)/',
-            "dnl Force PDO to use our compiled SQLite library\n  " .
-            "SQLITE_CFLAGS=\"-I{$buildroot}/include\"\n  " .
-            "SQLITE_LIBS=\"-L{$buildroot}/lib -lsqlite3\"\n  " .
-            "PHP_EVAL_INCLINE([\$SQLITE_CFLAGS])\n  " .
-            "PHP_EVAL_LIBLINE([\$SQLITE_LIBS], [PDO_SQLITE_SHARED_LIBADD])"
-        );
+        // Defense-in-depth: Also patch the generated configure script
+        // to ensure PDO uses our compiled SQLite library
+        // This is a backup in case the .m4 file patching doesn't work
+        $configureFile = SOURCE_PATH . '/php-src/configure';
+        if (file_exists($configureFile)) {
+            $content = file_get_contents($configureFile);
+
+            // Look for the PDO_SQLITE_OMIT_LOAD_EXTENSION definition and remove it
+            // This appears in the configure script if sqlite3_load_extension is not found
+            $content = preg_replace(
+                '/\$as_echo "#define PDO_SQLITE_OMIT_LOAD_EXTENSION 1" >>confdefs\.h/',
+                '# PDO_SQLITE_OMIT_LOAD_EXTENSION check removed by patch',
+                $content
+            );
+
+            file_put_contents($configureFile, $content);
+            logger()->info('Patched configure script to remove PDO_SQLITE_OMIT_LOAD_EXTENSION');
+        }
 
         return true;
     }

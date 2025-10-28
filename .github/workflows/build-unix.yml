@@ -145,7 +145,7 @@ jobs:
               ;;
           esac
           DOWN_CMD="$DOWN_CMD --with-php=${{ inputs.php-version }} --for-extensions=${{ inputs.extensions }} --ignore-cache-sources=php-src"
-          BUILD_CMD="$BUILD_CMD ${{ inputs.extensions }}"
+          BUILD_CMD="$BUILD_CMD ${{ inputs.extensions }} -P src/patch_sqlite_enable_extensions.php"
           # Always build sqlite from source to enable extension loading
           BUILD_CMD="$BUILD_CMD --with-libs=sqlite"
           if [ -n "${{ inputs.extra-libs }}" ]; then
