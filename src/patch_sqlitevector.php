@@ -123,6 +123,26 @@ if test $PHP_SQLITE3 != "no"; then
   AC_DEFINE([SQLITE_CORE], [1], [Build sqlite-vector as builtin])
   AC_DEFINE([SQLITE_VECTOR_STATIC], [1], [Static sqlite-vector])
 
+  dnl Architecture-specific SIMD optimizations
+  case "$host_cpu" in
+    aarch64*|arm64*)
+      AC_MSG_NOTICE([Enabling NEON SIMD optimizations for ARM64])
+      dnl NEON is always available on aarch64, compiler defines __ARM_NEON__ automatically
+      dnl Add explicit march flag to ensure optimal code generation
+      CFLAGS="$CFLAGS -march=armv8-a"
+      ;;
+    x86_64*|amd64*|i?86*)
+      AC_MSG_NOTICE([Enabling SSE2 SIMD optimizations for x86_64])
+      dnl Enable SSE2 (baseline for x86_64)
+      dnl Note: AVX2 code is NOT compiled to maintain binary compatibility
+      dnl To enable AVX2, add "-mavx2 -mfma" to CFLAGS (requires Haswell 2013+ CPUs)
+      CFLAGS="$CFLAGS -msse2"
+      ;;
+    *)
+      AC_MSG_NOTICE([Using CPU fallback for architecture: $host_cpu])
+      ;;
+  esac
+
   PHP_NEW_EXTENSION([sqlite3],
     [sqlite3.c sqlite-vector.c distance-cpu.c distance-sse2.c distance-avx2.c distance-neon.c core_init.c],
     [$ext_shared],,
