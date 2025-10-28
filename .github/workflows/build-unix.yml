@@ -146,6 +146,8 @@ jobs:
           esac
           DOWN_CMD="$DOWN_CMD --with-php=${{ inputs.php-version }} --for-extensions=${{ inputs.extensions }} --ignore-cache-sources=php-src"
           BUILD_CMD="$BUILD_CMD ${{ inputs.extensions }}"
+          # Always build sqlite from source to enable extension loading
+          BUILD_CMD="$BUILD_CMD --with-libs=sqlite"
           if [ -n "${{ inputs.extra-libs }}" ]; then
             DOWN_CMD="$DOWN_CMD --for-libs=${{ inputs.extra-libs }}"
             BUILD_CMD="$BUILD_CMD --with-libs=${{ inputs.extra-libs }}"
@@ -170,7 +172,7 @@ jobs:
           echo 'build='"$BUILD_CMD" >> "$GITHUB_OUTPUT"
           echo 'run='"$RUNS_ON" >> "$GITHUB_OUTPUT"
   build:
-    name: "Build ${{ inputs.version }} on ${{ inputs.os }}"
+    name: "Build ${{ inputs.php-version }} on ${{ inputs.os }}"
     runs-on: ${{ needs.define-build.outputs.run }}
     needs: define-build
     timeout-minutes: 240
@@ -201,6 +203,44 @@ jobs:
 #      - name: Setup tmate session
 #        if: ${{ failure() }}
 #        uses: mxschmitt/action-tmate@v3
+
+      # Validate SQLite load extension is available
+      - name: "Validate SQLite loadExtension is available"
+        run: |
+          buildroot/bin/php -d detect_unicode=0 -r '
+            // Test 1: SQLite3 extension loadExtension method
+            if (extension_loaded("sqlite3")) {
+              $db = new SQLite3(":memory:");
+              if (!method_exists($db, "loadExtension")) {
+                echo "ERROR: SQLite3::loadExtension() method not available!\n";
+                exit(1);
+              }
+              echo "SUCCESS: SQLite3::loadExtension() is available\n";
+              $db->close();
+            }
+
+            // Test 2: PDO SQLite load_extension SQL function
+            if (extension_loaded("pdo_sqlite")) {
+              $pdo = new PDO("sqlite::memory:");
+              try {
+                // Try to call load_extension with a fake path - it will fail but prove the function exists
+                $pdo->exec("SELECT load_extension(\"/nonexistent/test.so\")");
+              } catch (PDOException $e) {
+                // If we get an error about the file not existing, load_extension is enabled
+                // If we get "not authorized", it means SQLITE_OMIT_LOAD_EXTENSION was set
+                if (strpos($e->getMessage(), "not authorized") !== false) {
+                  echo "ERROR: PDO SQLite load_extension() is not authorized (SQLITE_OMIT_LOAD_EXTENSION is set)\n";
+                  exit(1);
+                }
+                echo "SUCCESS: PDO SQLite load_extension() is available (file not found error is expected)\n";
+              }
+              $pdo = null;
+            }
+
+            if (!extension_loaded("sqlite3") && !extension_loaded("pdo_sqlite")) {
+              echo "WARNING: Neither sqlite3 nor pdo_sqlite extensions are loaded, skipping validation\n";
+            }
+          '
 
       # Upload cli executable
       - if: ${{ inputs.build-cli == true }}

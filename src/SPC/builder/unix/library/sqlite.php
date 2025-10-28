@@ -10,7 +10,14 @@ trait sqlite
 {
     protected function build(): void
     {
-        UnixAutoconfExecutor::create($this)->configure()->make();
+        // Enable SQLite extension loading by setting CFLAGS
+        // This is critical for PDO's load_extension() to work
+        UnixAutoconfExecutor::create($this)
+            ->appendEnv([
+                'CFLAGS' => '-DSQLITE_ENABLE_LOAD_EXTENSION=1'
+            ])
+            ->configure()
+            ->make();
         $this->patchPkgconfPrefix(['sqlite3.pc']);
     }
 }
